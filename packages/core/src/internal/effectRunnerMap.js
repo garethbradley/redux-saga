@@ -286,7 +286,7 @@ export function runChannelEffect(env, { pattern, buffer }, cb) {
 }
 
 export function runCancelledEffect(env, data, cb, task) {
-  cb(task.mainTask._isCancelled)
+  cb(task.mainTask.cancelled)
 }
 
 export function runFlushEffect(env, channel, cb) {

@@ -20,14 +20,13 @@ export default function proc(env, iterator, parentContext, parentEffectId, meta,
   next.cancel = noop
 
   /** Create a main task to track the main flow */
-  const mainTask = { meta, cancel: cancelMain, _isRunning: true, _isCancelled: false }
+  const mainTask = { meta, cancel: cancelMain, running: true, cancelled: false }
 
   /**
     Creates a new task descriptor for this generator.
     A task is the aggregation of it's mainTask and all it's forked tasks.
   **/
   const task = newTask(env, mainTask, parentContext, parentEffectId, meta, isRoot, cont)
-  // task.
 
   /**
     attaches cancellation logic to this task's continuation
@@ -43,8 +42,8 @@ export default function proc(env, iterator, parentContext, parentEffectId, meta,
 
   /** cancellation of the main task. We'll simply resume the Generator with TASK_CANCEL */
   function cancelMain() {
-    if (mainTask._isRunning && !mainTask._isCancelled) {
-      mainTask._isCancelled = true
+    if (mainTask.running && !mainTask.cancelled) {
+      mainTask.cancelled = true
       next(TASK_CANCEL)
     }
   }
@@ -56,7 +55,7 @@ export default function proc(env, iterator, parentContext, parentEffectId, meta,
   **/
   function next(arg, isErr) {
     // Preventive measure. If we end up here, then there is really something wrong
-    if (!mainTask._isRunning) {
+    if (!mainTask.running) {
       throw new Error('Trying to resume an already finished generator')
     }
 
@@ -72,7 +71,7 @@ export default function proc(env, iterator, parentContext, parentEffectId, meta,
           - By cancelling the parent task manually
           - By joining a Cancelled task
         **/
-        mainTask._isCancelled = true
+        mainTask.cancelled = true
         /**
           Cancels the current effect; this will propagate the cancellation down to any called tasks
         **/
@@ -95,14 +94,14 @@ export default function proc(env, iterator, parentContext, parentEffectId, meta,
         /**
           This Generator has ended, terminate the main task and notify the fork queue
         **/
-        mainTask._isRunning = false
+        mainTask.running = false
         mainTask.cont(result.value)
       }
     } catch (error) {
-      if (mainTask._isCancelled) {
+      if (mainTask.cancelled) {
         env.logError(error)
       }
-      mainTask._isRunning = false
+      mainTask.running = false
       mainTask.cont(error, true)
     }
   }

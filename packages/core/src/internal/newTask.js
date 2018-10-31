@@ -6,12 +6,12 @@ import { addSagaStack, sagaStackToString } from './error-utils'
 import forkQueue from './forkQueue'
 
 export default function newTask(env, mainTask, parentContext, parentEffectId, meta, isRoot, cont) {
-  let _isRunning = true
-  let _isCancelled = false
-  let _isAborted = false
-  let _result
-  let _error
-  let _deferredEnd = null
+  let running = true
+  let cancelled = false
+  let aborted = false
+  let taskResult
+  let taskError
+  let deferredEnd = null
 
   const cancelledDueToErrorTasks = []
 
@@ -36,8 +36,8 @@ export default function newTask(env, mainTask, parentContext, parentEffectId, me
   function cancel() {
     // We need to check both Running and Cancelled status
     // Tasks can be Cancelled but still Running
-    if (_isRunning && !_isCancelled) {
-      _isCancelled = true
+    if (running && !cancelled) {
+      cancelled = true
       queue.cancelAll()
       // Ending with a TASK_CANCEL will propagate the Cancellation to all joiners
       end(TASK_CANCEL)
@@ -45,11 +45,11 @@ export default function newTask(env, mainTask, parentContext, parentEffectId, me
   }
 
   function end(result, isErr) {
-    _isRunning = false
+    running = false
 
     if (!isErr) {
-      _result = result
-      _deferredEnd && _deferredEnd.resolve(result)
+      taskResult = result
+      deferredEnd && deferredEnd.resolve(result)
     } else {
       addSagaStack(result, {
         meta,
@@ -66,13 +66,13 @@ export default function newTask(env, mainTask, parentContext, parentEffectId, me
           env.onError(result)
         }
         if (env.logError) {
-          // TODO: could we skip this when _deferredEnd is attached?
+          // TODO: could we skip this when deferredEnd is attached?
           env.logError(result)
         }
       }
-      _error = result
-      _isAborted = true
-      _deferredEnd && _deferredEnd.reject(result)
+      taskError = result
+      aborted = true
+      deferredEnd && deferredEnd.reject(result)
     }
     task.cont(result, isErr)
     task.joiners.forEach(j => j.cb(result, isErr))
@@ -88,22 +88,21 @@ export default function newTask(env, mainTask, parentContext, parentEffectId, me
   }
 
   function toPromise() {
-    if (_deferredEnd) {
-      return _deferredEnd.promise
+    if (deferredEnd) {
+      return deferredEnd.promise
     }
 
-    const def = deferred()
-    _deferredEnd = def
+    deferredEnd = deferred()
 
-    if (!_isRunning) {
-      if (_isAborted) {
-        def.reject(_error)
+    if (!running) {
+      if (aborted) {
+        deferredEnd.reject(taskError)
       } else {
-        def.resolve(_result)
+        deferredEnd.resolve(taskResult)
       }
     }
 
-    return def.promise
+    return deferredEnd.promise
   }
 
   const task = {
@@ -124,11 +123,11 @@ export default function newTask(env, mainTask, parentContext, parentEffectId, me
     end,
     setContext,
     toPromise,
-    isRunning: () => _isRunning,
-    isCancelled: () => _isCancelled,
-    isAborted: () => _isAborted,
-    result: () => _result,
-    error: () => _error,
+    isRunning: () => running,
+    isCancelled: () => cancelled,
+    isAborted: () => aborted,
+    result: () => taskResult,
+    error: () => taskError,
   }
 
   return task
