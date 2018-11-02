@@ -2,7 +2,7 @@ import { noop, remove } from './utils'
 
 /**
  Used to track a parent task and its forks
- In the new fork model, forked tasks are attached by default to their parent
+ In the fork model, forked tasks are attached by default to their parent
  We model this using the concept of Parent task && main Task
  main task is the main flow of the current Generator, the parent tasks is the
  aggregation of the main tasks + all its forked tasks.
@@ -15,10 +15,11 @@ import { noop, remove } from './utils'
  - It aborts if any uncaught error bubbles up from forks
  - If it completes, the return value is the one returned by the main task
  **/
-export default function forkQueue(mainTask, onAbort, cb) {
-  let tasks = [],
-    result,
-    completed = false
+export default function forkQueue(mainTask, onAbort, cont) {
+  let tasks = []
+  let result
+  let completed = false
+
   addTask(mainTask)
   const getTasks = () => tasks
   const getTaskNames = () => tasks.map(t => t.meta.name)
@@ -26,7 +27,7 @@ export default function forkQueue(mainTask, onAbort, cb) {
   function abort(err) {
     onAbort()
     cancelAll()
-    cb(err, true)
+    cont(err, true)
   }
 
   function addTask(task) {
@@ -46,7 +47,7 @@ export default function forkQueue(mainTask, onAbort, cb) {
         }
         if (!tasks.length) {
           completed = true
-          cb(result)
+          cont(result)
         }
       }
     }
